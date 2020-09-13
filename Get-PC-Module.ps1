@@ -5843,8 +5843,6 @@ function Get-GPOUserTestResults {
         [parameter(HelpMessage = "Domain\Username", Mandatory = $True)][string]$username,
         [parameter(HelpMessage = "Target Computer Name", Mandatory = $True)][string]$Computername
     )
-    $username = "tbc\dbolding_adm"
-    $ComputerName = "mtxs-centerterm"
     $reportpath = "$($env:USERPROFILE)\Desktop\$($Username -replace '/\','_')-$Computername-GPO-Report.xml"
     Get-GPResultantSetOfPolicy -Computer $Computername -User $username -ReportType xml -Path $reportpath
     [xml]$test = Get-Content $reportpath
@@ -5855,7 +5853,7 @@ function Get-GPOUserTestResults {
 Function Get-SHDReceiveConnectorScope {
     [cmdletbinding()]
     param (
-        [parameter(HelpMessage = "Receive Connector Idenitiy", Mandatory = $True)][string]$ReceiveConnectorIdentity = 'MTXS-MAILCAS1\MAILCAS1 Relay',
+        [parameter(HelpMessage = "Receive Connector Idenitiy", Mandatory = $True)][string]$ReceiveConnectorIdentity,
         [switch]$Connectivity,
         [String]$DHCPInfo
     )
