@@ -3879,7 +3879,7 @@ Function Get-SHDIPGeoLocation {
     param (
         [parameter(HelpMessage = "Enter an IP address", Mandatory = $true)][alias("IPaddress")][ipaddress]$IP
     )
-    $Token = "5ecd956489fa2ce71eb5b9743e8259a5"
+    
     Invoke-RestMethod -Method Get -Uri "http://api.ipstack.com/$($IP)?access_key=$($Token)" | Select-Object IP, Type, Continent_name, Country_Name, Region_Name, City, Zip, Latitude, Longitude
 } #Review - Testing, Docunentation
 
