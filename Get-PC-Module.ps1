@@ -229,7 +229,74 @@ function Enable-SHDComputerRDP {
         }
     } 
 } #Review - Testng, Documentation
-
+function enable-SHDComputerBitlocker {
+    [cmdletbinding()]
+    param (
+        [Parameter(
+            ValueFromPipeline = $True,
+            ValueFromPipelineByPropertyName = $True,
+            HelpMessage = "Provide the target hostname",
+            Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Computername,
+        [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
+    )
+    foreach ($Computer in $Computername) {
+        if (Test-Connection -computername $Computer -Count 1 -Quiet) {
+            if ($PSBoundParameters.ContainsKey('Credential')) {
+                invoke-command -ComputerName $Computer -Credential $Credential -ScriptBlock {
+                    import-module bitlocker
+                    $BitVolume = Get-BitLockerVolume -MountPoint "$($env:SystemDrive)"
+                    if ($BitVolume.ProtectionStatus -like "off") {
+                        $TPMChip = Get-CimInstance -ClassName win32_tpm -Namespace "root\cimv2\Security\MicrosoftTPM"
+                        if ($TPMChip.IsEnabled_InitialValue -eq $true) {
+                            if ($TPMChip.IsActivated_InitialValue -eq $true) {
+                                Enable-BitLocker -MountPoint "$($env:SystemDrive)" -EncryptionMethod Aes128 -TpmProtector -SkipHardwareTest 
+                                Start-Sleep -Seconds 15 -Verbose
+                                Get-BitLockerVolume -MountPoint "$($env:SystemDrive)"
+                            }
+                            else {
+                                write-warning "$Computer TPM chip is not actiavted."
+                            }
+                        }
+                        else {
+                            Write-Warning "$Computer TPM chip is not enabled. "
+                        }
+                    }
+                    else {
+                        $BitVolume
+                    }
+                }
+            }
+            else {
+                invoke-command -computername $Computer -ScriptBlock {
+                    import-module bitlocker
+                    $BitVolume = Get-BitLockerVolume -MountPoint "$($env:SystemDrive)"
+                    if ($BitVolume.ProtectionStatus -like "off") {
+                        $TPMChip = Get-CimInstance -ClassName win32_tpm -Namespace "root\cimv2\Security\MicrosoftTPM"
+                        if ($TPMChip.IsEnabled_InitialValue -eq $true) {
+                            if ($TPMChip.IsActivated_InitialValue -eq $true) {
+                                Enable-BitLocker -MountPoint "$($env:SystemDrive)" -EncryptionMethod Aes128 -TpmProtector -SkipHardwareTest 
+                                Start-Sleep -Seconds 15 -Verbose
+                                Get-BitLockerVolume -MountPoint "$($env:SystemDrive)"
+                            }
+                            else {
+                                write-warning "$Computer TPM chip is not actiavted."
+                            }
+                        }
+                        else {
+                            Write-Warning "$Computer TPM chip is not enabled. "
+                        }
+                    }
+                    else {
+                        $BitVolume
+                    }
+                }
+            }
+        }
+        else {
+            Write-Warning "$Computer is offline."
+        }
+    }
+} #Review - Testing, Documentation
 #-------------------------Computer - Enable --------------------------------#
 #-------------------------Computer - Get -----------------------------------#
 function Get-SHDComputerActiveNetworking {
@@ -457,33 +524,26 @@ function Get-SHDComputerBitlockerStatus {
         if (Test-Connection -ComputerName $computer -Count 1 -Quiet) {
             try {
                 if ($PSBoundParameters.ContainsKey('Credential')) {
-                    $CIMSession = New-CimSession -ComputerName $Computer -Credential $Credential
-
-                    Remove-CimSession $CIMSession
+                    invoke-command -ComputerName $Computer -Credential $Credential -ScriptBlock {
+                        Get-BitLockerVolume 
+                    } | Select-Object PSComputerName, ProtectionStatus, MountPoint, EncryptionMethod, EncryptionPercentage, VolumeStatus, KeyProtector
                 }
                 else {
-
+                    invoke-command -ComputerName $Computer -ScriptBlock {
+                        Get-BitLockerVolume 
+                    } | Select-Object PSComputerName, ProtectionStatus, MountPoint, EncryptionMethod, EncryptionPercentage, VolumeStatus, KeyProtector
                 }
             }
             catch {
-                try {
-                    if ($PSBoundParameters.ContainsKey('Credential')) {
-
-                    }
-                    else {
-                        
-                    }
-                }
-                catch {
-                    Write-Warning "Unable to capture Data from $Computer."
-                }
+                Write-Warning "Unable to capture Data from $Computer."
             }
         }
         else {
             Write-Warning "$Computer is offline."
         }
     }
-}
+} # Review - Order,testing,Documentation
+
 function Get-SHDComputerChassisType {
     [cmdletbinding()]
     param (
@@ -494,61 +554,50 @@ function Get-SHDComputerChassisType {
             Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Computername,
         [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
     )
-    foreach ($Computer in $Computernames) {
+    foreach ($Computer in $Computername) {
         if (Test-Connection -ComputerName $Computer -Quiet -Count 1) {
             Try {
                 if ($PSBoundParameters.ContainsKey('Credential')) {
-                    $chassis = WmiObject -Class win32_systemenclosure -computer $Computer -Credential $Credential | Select-Object -ExpandProperty chassistypes  
+                    $cimsession = New-CimSession -ComputerName $Computer -Credential $Credential
+                    $chassis = Get-CimInstance -Class win32_systemenclosure -CimSession $cimsession | Select-Object -ExpandProperty chassistypes  
+                    Remove-CimSession $cimsession
                 }
                 else {
-                    $chassis = Get-WmiObject -Class win32_systemenclosure -computer $Computer | Select-Object -ExpandProperty chassistypes  
+                    $chassis = Get-CimInstance -Class win32_systemenclosure -computer $Computer | Select-Object -ExpandProperty chassistypes  
                 }
             }
             catch {
-                Try {
-                    if ($PSBoundParameters.ContainsKey('Credential')) {
-                        $cimsession = New-CimSession -ComputerName $Computer -Credential $Credential
-                        $chassis = Get-CimInstance -Class win32_systemenclosure -CimSession $cimsession | Select-Object -ExpandProperty chassistypes  
-                        Remove-CimSession $cimsession
-                    }
-                    else {
-                        $chassis = Get-CimInstance -Class win32_systemenclosure -computer $Computer | Select-Object -ExpandProperty chassistypes  
-                    }
-                }
-                catch {
-                    Write-Warning "Unable to capture Data from $Computer"
-                }
+                Write-Warning "Unable to capture Data from $Computer"
             }
-            if ($null -ne $chassis) {
-                if ($chassis -contains '3') { $Thechassis = "Desktop" }  
-                elseif ($chassis -contains '4') { $Thechassis = "Low Profile Desktop" }  
-                elseif ($chassis -contains '5') { $Thechassis = "Pizza Box" }  
-                elseif ($chassis -contains '6') { $Thechassis = "Mini Tower" }  
-                elseif ($chassis -contains '7') { $Thechassis = "Tower" }  
-                elseif ($chassis -contains '8') { $Thechassis = "Portable" }  
-                elseif ($chassis -contains '9') { $Thechassis = "Laptop" }  
-                elseif ($chassis -contains '10') { $Thechassis = "Notebook" }  
-                elseif ($chassis -contains '11') { $Thechassis = "Hand Held" }  
-                elseif ($chassis -contains '12') { $Thechassis = "Docking Station" }  
-                elseif ($chassis -contains '13') { $Thechassis = "All in One" }  
-                elseif ($chassis -contains '14') { $Thechassis = "Sub Notebook" }  
-                elseif ($chassis -contains '15') { $Thechassis = "Space-Saving" }   
-                elseif ($chassis -contains '16') { $Thechassis = "Lunch Box" }  
-                elseif ($chassis -contains '17') { $Thechassis = "Main System Chassis" }  
-                elseif ($chassis -contains '18') { $Thechassis = "Expansion Chassis" }  
-                elseif ($chassis -contains '19') { $Thechassis = "Sub Chassis" }  
-                elseif ($chassis -contains '20') { $Thechassis = "Bus Expansion Chassis" }  
-                elseif ($chassis -contains '21') { $Thechassis = "Peripheral Chassis" }  
-                elseif ($chassis -contains '22') { $Thechassis = "Storage Chassis" }  
-                elseif ($chassis -contains '23') { $Thechassis = "Rack Mount Chassis" }  
-                elseif ($chassis -contains '24') { $Thechassis = "Sealed-Case PC" }  
-                else { $Thechassis = "Unkown" }  
-                [pscustomobject]@{
-                    name = $Computer
-                    Type = $Thechassis
-                }
+            $theChassis = switch ($chassis) {
+                3 { "Desktop" }
+                4 { "Low Profile Desktop" }
+                5 { "Pizza Box" }
+                6 { "Mini Tower" }
+                7 { "Tower" }
+                8 { "Portable" }
+                9 { "Laptop" }
+                10 { "Notebook" }
+                11 { "Hand Held" }
+                12 { "Docking Station" }
+                13 { "All In One" }
+                14 { "Sub Notebook" }
+                15 { "Space-Saving" }
+                16 { "Lunch Box" }
+                17 { "Main System Chassis" }
+                18 { "Expansion Chassis" }
+                19 { "Sub Chassis" }
+                20 { "Bus Expansion Chassis" }
+                21 { "Peripheral Chassis" }
+                22 { "Storage Chassis" }
+                23 { "Rack Mount Chassis" }
+                24 { "Sealed-case PC" }
+                Default { "Unknown" }
+            }   
+            [pscustomobject]@{
+                Computername = $Computer
+                ChassisType  = $theChassis
             }
-            else { Write-Warning "No Data Collected on $Computer" }
         }
         else {
             Write-Warning "$Computer Offline"
@@ -3682,7 +3731,7 @@ function Get-SHDComputerWSUSUpdates {
 } #Review - Test, Documentation
 
 #-------------------------Computer - Get -----------------------------------#
-
+#-------------------------Computer - Remove --------------------------------#
 function Remove-SHDComputerLocalGroupMember {
     <#
     .SYNOPSIS
@@ -3754,85 +3803,7 @@ function Remove-SHDComputerLocalGroupMember {
         }
     }
 } #Review - testing, Documentation
-function Get-SHDComputerLocalGroupMember {
-    [cmdletbinding()]
-    param (
-        [Parameter(
-            ValueFromPipeline = $True,
-            ValueFromPipelineByPropertyName = $True,
-            HelpMessage = "Provide the target hostname",
-            Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Computername,
-        [Parameter(HelpMessage = "Target Group", Mandatory = $True)][String[]]$GroupName,
-        [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
-    )
-    foreach ($computer in $Computername) {
-        if (Test-Connection -ComputerName $computer -Count 1 -Quiet) {
-            foreach ($Group in $GroupName) {
-                Foreach ($User in $username) {
-                    try {
-                        if ($PSBoundParameters.ContainsKey('Credential')) {
-                            Invoke-Command -ComputerName $computer -Credential $Credential -ScriptBlock {
-                                Get-LocalGroupMember -Group $args[0]
-                            } -ArgumentList $Group, $User | Select-Object PScomputername, ObjectClass, name, principalsource
-                        }
-                        else {
-                            Invoke-Command -ComputerName $computer -ScriptBlock {
-                                Get-LocalGroupMember -Group $args[0]
-                            } -ArgumentList $Group, $User | Select-Object PScomputername, ObjectClass, name, principalsource
-                        }
-                    }
-                    catch {
-                        Write-Warning "Unable to access $computer information."
-                    }
-                }
-            }
-        }
-        else {
-            Write-Warning "$Computer offline."
-        }
-    }
-} #Review - testing, Documentation
-function New-SHDComputerLocalGroup {
-    [cmdletbinding()]
-    param (
-        [Parameter(
-            ValueFromPipeline = $True,
-            ValueFromPipelineByPropertyName = $True,
-            HelpMessage = "Provide the target hostname",
-            Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Computername,
-        [Parameter(HelpMessage = "Target Group", Mandatory = $True)][String]$Name,
-        [parameter(HelpMessage = "Group Type", Mandatory = $True)][string]$Description,
-        [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
-    )
-    foreach ($computer in $Computername) {
-        if (Test-Connection -ComputerName $computer -Count 1 -Quiet) {
-            if ($PSBoundParameters.ContainsKey('Credential')) {
-                invoke-command -ComputerName $computer -Credential $Credential -ScriptBlock {
-                    try { $Temp = Get-LocalGroup -Name $args[0] }
-                    catch { $Temp = $null }
-                    if ($null -eq $Temp) {
-                        New-LocalGroup -Name $args[0] -Description $args[1] -Confirm:$false
-                        Get-LocalGroup -Name $args[0]
-                    }
-                } -ArgumentList $name, $Description
-            }
-            else {
-                invoke-command -ComputerName $computer -ScriptBlock {
-                    try { $Temp = Get-LocalGroup -Name $args[0] }
-                    catch { $Temp = $null }
-                    if ($null -eq $Temp) {
-                        New-LocalGroup -Name $args[0] -Description $args[1] -Confirm:$false
-                        Get-LocalGroup -Name $args[0]
-                    }
-                } -ArgumentList $name, $Description
-            }
-        }
-        else {
-            Write-Warning "$Computer offline."
-        }
-    }
 
-} #Review - Testing, Documentation
 function Remove-SHDComputerLocalGroup {
     [cmdletbinding()]
     param (
@@ -3873,16 +3844,6 @@ function Remove-SHDComputerLocalGroup {
     }
 
 } #Review - Testing, Documentation
-
-Function Get-SHDIPGeoLocation {
-    [cmdletbinding()]
-    param (
-        [parameter(HelpMessage = "Enter an IP address", Mandatory = $true)][alias("IPaddress")][ipaddress]$IP
-    )
-    
-    Invoke-RestMethod -Method Get -Uri "http://api.ipstack.com/$($IP)?access_key=$($Token)" | Select-Object IP, Type, Continent_name, Country_Name, Region_Name, City, Zip, Latitude, Longitude
-} #Review - Testing, Docunentation
-
 function Remove-SHDComputerProfile {
     [cmdletbinding()]
     param (
@@ -4060,6 +4021,9 @@ Function Remove-SHDComputerUserProfile {
         }
     }
 } #Review - Testing, Documentation
+
+#-------------------------Computer - Remove --------------------------------#
+#-------------------------Computer - Set -----------------------------------#
 function Set-SHDMacAddressStructure {
     [cmdletbinding()]
     param (
@@ -4267,8 +4231,6 @@ function Set-SHDComputerSpeaker {
         }
     }
 } #Review - Testing, Documentation
-
-
 function Set-SHDComputerToUseWSUSserver {
     [cmdletbinding()]
     param (
@@ -4316,6 +4278,95 @@ function Set-SHDComputerToUseWSUSserver {
         }
     }
 } #Review - Test, Documentation
+function Get-SHDComputerLocalGroupMember {
+    [cmdletbinding()]
+    param (
+        [Parameter(
+            ValueFromPipeline = $True,
+            ValueFromPipelineByPropertyName = $True,
+            HelpMessage = "Provide the target hostname",
+            Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Computername,
+        [Parameter(HelpMessage = "Target Group", Mandatory = $True)][String[]]$GroupName,
+        [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
+    )
+    foreach ($computer in $Computername) {
+        if (Test-Connection -ComputerName $computer -Count 1 -Quiet) {
+            foreach ($Group in $GroupName) {
+                Foreach ($User in $username) {
+                    try {
+                        if ($PSBoundParameters.ContainsKey('Credential')) {
+                            Invoke-Command -ComputerName $computer -Credential $Credential -ScriptBlock {
+                                Get-LocalGroupMember -Group $args[0]
+                            } -ArgumentList $Group, $User | Select-Object PScomputername, ObjectClass, name, principalsource
+                        }
+                        else {
+                            Invoke-Command -ComputerName $computer -ScriptBlock {
+                                Get-LocalGroupMember -Group $args[0]
+                            } -ArgumentList $Group, $User | Select-Object PScomputername, ObjectClass, name, principalsource
+                        }
+                    }
+                    catch {
+                        Write-Warning "Unable to access $computer information."
+                    }
+                }
+            }
+        }
+        else {
+            Write-Warning "$Computer offline."
+        }
+    }
+} #Review - testing, Documentation
+function New-SHDComputerLocalGroup {
+    [cmdletbinding()]
+    param (
+        [Parameter(
+            ValueFromPipeline = $True,
+            ValueFromPipelineByPropertyName = $True,
+            HelpMessage = "Provide the target hostname",
+            Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Computername,
+        [Parameter(HelpMessage = "Target Group", Mandatory = $True)][String]$Name,
+        [parameter(HelpMessage = "Group Type", Mandatory = $True)][string]$Description,
+        [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
+    )
+    foreach ($computer in $Computername) {
+        if (Test-Connection -ComputerName $computer -Count 1 -Quiet) {
+            if ($PSBoundParameters.ContainsKey('Credential')) {
+                invoke-command -ComputerName $computer -Credential $Credential -ScriptBlock {
+                    try { $Temp = Get-LocalGroup -Name $args[0] }
+                    catch { $Temp = $null }
+                    if ($null -eq $Temp) {
+                        New-LocalGroup -Name $args[0] -Description $args[1] -Confirm:$false
+                        Get-LocalGroup -Name $args[0]
+                    }
+                } -ArgumentList $name, $Description
+            }
+            else {
+                invoke-command -ComputerName $computer -ScriptBlock {
+                    try { $Temp = Get-LocalGroup -Name $args[0] }
+                    catch { $Temp = $null }
+                    if ($null -eq $Temp) {
+                        New-LocalGroup -Name $args[0] -Description $args[1] -Confirm:$false
+                        Get-LocalGroup -Name $args[0]
+                    }
+                } -ArgumentList $name, $Description
+            }
+        }
+        else {
+            Write-Warning "$Computer offline."
+        }
+    }
+
+} #Review - Testing, Documentation
+#-------------------------Computer - Set -----------------------------------#
+Function Get-SHDIPGeoLocation {
+    [cmdletbinding()]
+    param (
+        [parameter(HelpMessage = "Enter an IP address", Mandatory = $true)][alias("IPaddress")][ipaddress]$IP
+    )
+    
+    Invoke-RestMethod -Method Get -Uri "http://api.ipstack.com/$($IP)?access_key=$($Token)" | Select-Object IP, Type, Continent_name, Country_Name, Region_Name, City, Zip, Latitude, Longitude
+} #Review - Testing, Docunentation
+
 function Invoke-SHDEditRemoteFile {
     [cmdletbinding()]
     param (
@@ -4323,7 +4374,6 @@ function Invoke-SHDEditRemoteFile {
     )
     notepad.exe $FilePath
 }
-
 function Invoke-SHDLogoffUser {
     <#
 .SYNOPSIS
@@ -5499,6 +5549,47 @@ function New-SHDPassword {
         -join ((32..95) + (97..126) | Get-Random -Count $Number | ForEach-Object { [char]$_ })
     }
 } #Review - Testing, Documentation
+function invoke-SHDDisableInactiveUsers {
+    [cmdletbinding()]
+    param (
+        [parameter(HelpMessage = "Days after", Mandatory = $True)][int]$DaysBack,
+        [parameter(HelpMessage = "Moves to this OU if provided, If not, finds disable ou and moves it.")][string]$DisabledOU,
+        [parameter(HelpMessage = "Moves to this OU if provided, If not, finds disable ou and moves it.", Mandatory = $true)][string]$SearchOU,
+        [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential,
+        [parameter(HelpMessage = "Show results")][switch]$ShowResults
+    )
+    $Time = (get-date).AddDays( - ($DaysBack))
+    if ($PSBoundParameters.ContainsKey('Credential')) {
+        $users = Get-aduser -Filter { Enabled -eq $true } -Credential $Credential -SearchBase $SearchOU -Properties LastLogondate | Where-Object { ($_.LastLogonDate -le $Time) -and ($null -ne $_.LastLogonDate) } | Sort-Object Samaccountname
+        if ($PSBoundParameters.ContainsKey('DisabledOU')) {
+            $DisabledOU = $DisabledOU
+        }
+        else {
+            $DisabledOU = Find-SHDDisabledUsersOU -Credential $Credential
+        }
+        foreach ($User in $users) {
+            Disable-SHDUser -Username $user.samaccountname -OU $DisabledOU -Credential $Credential 
+            if ($ShowResults) {
+                Get-aduser -Identity $user.samaccountname -Properties LastLogonDate, Memberof -Credential $Credential | Select-Object DistinguishedName, Samaccountname, Name, Lastlogondate, Enabled, @{l = "GroupCount"; e = { $_.memberof.count } }
+            }
+        }
+    }
+    else {
+        $users = Get-aduser -Filter { Enabled -eq $true } -SearchBase $SearchOU -Properties LastLogondate | Where-Object { ($_.LastLogonDate -le $Time) -and ($null -ne $_.LastLogonDate) } | sort-object Samaccountname
+        if ($PSBoundParameters.ContainsKey('OU')) {
+            $DisabledOU = $DisabledOU
+        }
+        else {
+            $DisabledOU = Find-SHDDisabledUsersOU
+        }
+        foreach ($User in $users) {
+            Disable-SHDUser -Username $user.samaccountname -OU $DisabledOU
+            if ($ShowResults) {
+                Get-aduser -Identity $user.samaccountname -Properties LastLogonDate, Memberof | Select-Object DistinguishedName, Samaccountname, Name, Lastlogondate, Enabled, @{l = "GroupCount"; e = { $_.memberof.count } }
+            }
+        }
+    }
+}
 Function Disable-SHDUser {
     <#
     .SYNOPSIS
@@ -6220,3 +6311,4 @@ function Invoke-SHDqoutes {
         $return.Trim("$NewDelimiter") | clip
     }
 }
+
