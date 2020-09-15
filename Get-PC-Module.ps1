@@ -614,7 +614,7 @@ function Get-SHDComputerCPU {
             Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Computername,
         [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
     )
-    foreach ($Computer in $Computernames) {
+    foreach ($Computer in $Computername) {
         if (Test-Connection -ComputerName $Computer -Quiet -Count 1) {
             Try {
                 if ($PSBoundParameters.ContainsKey('Credentials')) {
@@ -1853,7 +1853,7 @@ function Get-SHDComputerLogicalRemovableDrives {
             catch {
                 try {
                     if ($PSBoundParameters.ContainsKey('Credential')) {
-                        $Logicaldisk = Get-WmiObject -Class win32_logicaldisk -ComputerName $ComputerName -credential $Credential | Select-Object *
+                        $Logicaldisk = Get-WmiObject -Class win32_logicaldisk -ComputerName $Computer -credential $Credential | Select-Object *
                         $Logicaldisk | Where-Object { $_.drivetype -eq 2 } | Select-Object -Property @(
                             @{Label = "Caption"; Expression = { $_.caption } }
                             @{Label = "Description"; Expression = { $_.Description } }
@@ -1863,7 +1863,7 @@ function Get-SHDComputerLogicalRemovableDrives {
                         )
                     }
                     else {
-                        $Logicaldisk = Get-WmiObject -Class win32_logicaldisk -ComputerName $ComputerName | Select-Object *
+                        $Logicaldisk = Get-WmiObject -Class win32_logicaldisk -ComputerName $computer | Select-Object *
                         $Logicaldisk | Where-Object { $_.drivetype -eq 2 } | Select-Object -Property @(
                             @{Label = "Caption"; Expression = { $_.caption } }
                             @{Label = "Description"; Expression = { $_.Description } }
@@ -4242,7 +4242,7 @@ function Set-SHDComputerToUseWSUSserver {
         [parameter(mandatory = $True)][validateset("Enable", "Disable")][string]$Command,
         [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
     )
-    foreach ($Computer in $ComputerNames) {
+    foreach ($Computer in $ComputerName) {
         if (Test-Connection -ComputerName $Computer -Quiet -Count 1) {
             if ($PSBoundParameters.ContainsKey('Credential')) {
                 if ($Command -eq "Enable") {
@@ -6244,7 +6244,7 @@ function Get-SHDOpenFiles {
     param (
         [parameter(Helpmessage = "Computer Name", Mandatory = $True)][alais('Computer', 'PCName')][string[]]$ComputerName
     )
-    foreach ($Computer in $ComputerNames) {
+    foreach ($Computer in $ComputerName) {
         if (Test-Connection -ComputerName $Computer -Quiet -Count 1) {
             try {
                 openfiles.exe /query /s $Computer /v /fo csv | ConvertFrom-Csv
