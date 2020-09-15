@@ -1,12 +1,9 @@
 ﻿<#
     Get-SHDComputerDesktopShortcuts - Errors
     Get-SHDComputerDiskLoad - No Load information
-    Get-SHDComputerInfo - No Make model information 
     Get-SHDComputerLocalAccounts - Takes to much time 
     Get-SHDComputerLocalGroup - Requires a name 
     Get-SHDComputerLocalGroupMember and Get-SHDComputerLocalGroupMembers
-    Get-SHDComputerLogicalNetworkDrive - No Info
-    Get-SHDComputerLogicalRemovableDrives - No Info  
     Get-SHDComputerMemoryLoad - Error Message
     Get-SHDComputerPrinters - Error Messages 
     Get-SHDComputerRam - Error Message 
@@ -1416,8 +1413,8 @@ function Get-SHDComputerInfo {
         if (Test-Connection -ComputerName $Computer -Count 1 -Quiet) {
             if ($PSBoundParameters.ContainsKey('Credential')) {
                 try {
-                    $CIMSession = New-CimSession -ComputerName $Computer -Credential $Credential
-                    $ComputerSystem = Get-CimInstance -ClassName win32_ComputerSystem -CimSession $CIMSession
+                    $CIMSession = New-CimSession -ComputerName $Computer -Credential $Credential 
+                    $ComputerSystem = Get-CimInstance -ClassName win32_ComputerSystem -CimSession $CIMSession -Property Name, Manufacturer, Model, Status, PrimaryOwnername, SystemFamily, TotalPhysicalMemory
                     $ComputerProcess = Get-CimInstance -ClassName win32_process -CimSession $CIMSession
                     $ComputerOS = Get-CimInstance -ClassName Win32_OperatingSystem -CimSession $CIMSession
                     $ComputerBIOS = Get-CimInstance -ClassName win32_bios -CimSession $CIMSession
@@ -1426,7 +1423,7 @@ function Get-SHDComputerInfo {
                     $TheIP = (Test-Connection -ComputerName $Computer -Count 1).DisplayAddress.ToString()
                     $Uptime = (New-TimeSpan -Start $Computeros.LastBootUpTime -End $computeros.LocalDateTime).tostring()
                     [pscustomobject]@{
-                        ComputerName = $ComputerSystem.PSComputerName
+                        ComputerName = $ComputerSystem.name
                         Make         = $ComputerSystem.Manufacturer
                         Model        = $ComputerSystem.Model
                         SerialNumber = $ComputerBIOS.SerialNumber
@@ -1469,7 +1466,7 @@ function Get-SHDComputerInfo {
             }
             else {
                 try {
-                    $ComputerSystem = Get-CimInstance -ClassName win32_ComputerSystem -ComputerName $Computer
+                    $ComputerSystem = Get-CimInstance -ClassName win32_ComputerSystem -ComputerName $Computer -Property Name, Manufacturer, Model, Status, PrimaryOwnername, SystemFamily, TotalPhysicalMemory
                     $ComputerProcess = Get-CimInstance -ClassName win32_process -ComputerName $Computer
                     $ComputerOS = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $Computer
                     $ComputerBIOS = Get-CimInstance -ClassName win32_bios -ComputerName $Computer
@@ -2471,7 +2468,7 @@ function Get-SHDComputerRam {
             try {
                 if ($PSBoundParameters.ContainsKey('Credential')) {
                     $CIMSession = New-CimSession -ComputerName $Computer -Credential $Credential
-                    $ComputerSystem = Get-CimInstance -Class win32_ComputerSystem -CimSession $cimsession | Select-Object *
+                    $ComputerSystem = Get-CimInstance -Class win32_ComputerSystem -CimSession $cimsession -Property TotalPhysicalMemory | Select-Object *
                     $ComputerOS = Get-CimInstance -Class Win32_OperatingSystem -CimSession $cimsession | Select-Object *
                     [pscustomobject]@{
                         ComputerName = $ComputerSystem.pscomputername
@@ -2482,7 +2479,7 @@ function Get-SHDComputerRam {
                     Remove-CimSession $CIMSession
                 }
                 else {
-                    $ComputerSystem = Get-CimInstance -Class win32_ComputerSystem -ComputerName $Computer | Select-Object *
+                    $ComputerSystem = Get-CimInstance -Class win32_ComputerSystem -ComputerName $Computer -Property TotalPhysicalMemory | Select-Object *
                     $ComputerOS = Get-CimInstance -Class Win32_OperatingSystem -ComputerName $Computer | Select-Object *
                     [pscustomobject]@{
                         ComputerName = $ComputerSystem.pscomputername
