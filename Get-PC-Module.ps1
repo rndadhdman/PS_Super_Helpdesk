@@ -136,7 +136,7 @@ function Clear-SHDComputerUserTemporaryFiles {
         if (Test-Connection -ComputerName $computer -Count 1 -Quiet) {
             foreach ($User in $Username) {
                 if ($PSBoundParameters.ContainsKey('Credential')) {
-                    if (Test-Path -Path "\\$ComputerName\c$\Users\$Username") {
+                    if (Test-Path -Path "\\$Computer\c$\Users\$Username") {
                         Remove-Item "\\$Computer\c$\Users\$Username\AppData\Local\Temp\*" -Recurse -Force -Verbose -ErrorAction SilentlyContinue -Credential $Credential -Confirm:$false
                     }
                 }
@@ -4592,28 +4592,7 @@ function Get-SHDAllPrinters {
 }
 
 #--------------------------------------User/Groups---------------------------------------#
-
-function Test-SHDPasswordSecurity {
-    param(
-        [Parameter(Mandatory)][securestring]$Password
-    )
-    $StringBuilder = New-Object System.Text.StringBuilder
-    $Cred = [pscredential]::new("User", $Password)
-    [System.Security.Cryptography.HashAlgorithm]::Create("SHA1").ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Cred.GetNetworkCredential().Password)) |
-    ForEach-Object { [Void]$StringBuilder.Append($_.ToString("x2")) }
-    $Hash = $StringBuilder.ToString()
-    $First5 = $Hash.Substring(0, 5)
-    $Results = (Invoke-RestMethod -Uri "https://api.pwnedpasswords.com/range/$First5").split("`n") | ForEach-Object {
-        [PSCustomObject]@{
-            Hash           = $First5 + $_.Split(':')[0]
-            PasswordsFound = [int]($_.Split(':')[1])
-        }
-    }
-    if ($Results.Hash -contains $Hash) {
-        $Count = ($Results | Where-Object Hash -eq $Hash).PasswordsFound
-        $Count
-    }
-} #Review - Testing, Documentation
+#--------------------------------------User - Get----------------------------------------#
 function Get-SHDUsername {
     [cmdletbinding()]
     param (
@@ -4901,6 +4880,30 @@ function Get-SHDUsername {
         }
     }
 } #Review - Testing, Documentation
+
+#--------------------------------------User - Get----------------------------------------#
+function Test-SHDPasswordSecurity {
+    param(
+        [Parameter(Mandatory)][securestring]$Password
+    )
+    $StringBuilder = New-Object System.Text.StringBuilder
+    $Cred = [pscredential]::new("User", $Password)
+    [System.Security.Cryptography.HashAlgorithm]::Create("SHA1").ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Cred.GetNetworkCredential().Password)) |
+    ForEach-Object { [Void]$StringBuilder.Append($_.ToString("x2")) }
+    $Hash = $StringBuilder.ToString()
+    $First5 = $Hash.Substring(0, 5)
+    $Results = (Invoke-RestMethod -Uri "https://api.pwnedpasswords.com/range/$First5").split("`n") | ForEach-Object {
+        [PSCustomObject]@{
+            Hash           = $First5 + $_.Split(':')[0]
+            PasswordsFound = [int]($_.Split(':')[1])
+        }
+    }
+    if ($Results.Hash -contains $Hash) {
+        $Count = ($Results | Where-Object Hash -eq $Hash).PasswordsFound
+        $Count
+    }
+} #Review - Testing, Documentation
+
 Function Copy-SHDUserGroupToUser {
     [cmdletbinding()]
     param (
@@ -5044,7 +5047,7 @@ function Copy-SHDUserToUser {
     catch {
         write-warning "Unable to find $SourceUser"
         break
-        $Source = Get-ADUser -Identity dbolding -Properties *
+        $Source = Get-ADUser -Identity $SourceUser -Properties *
     }
     $OU = $Source.DistinguishedName -replace '^CN=.*?,', '' 
     Foreach ($Target in $TargetUser) {
@@ -5082,20 +5085,58 @@ function Get-SHDUserInfo {
         [Parameter(
             ValueFromPipeline = $True,
             ValueFromPipelineByPropertyName = $True,
-            HelpMessage = "Provide the target hostname",
-            Mandatory = $true)][Alias('Hostname', 'cn')][String[]]$Name,
+            HelpMessage = "Provide the target Name",
+            Mandatory = $true)][Alias('Identity', 'Samaccountname', 'cn')][String[]]$Username,
         [Parameter(HelpMessage = "Allows for custom Credential.")][System.Management.Automation.PSCredential]$Credential
     )
-    foreach ($User in $Name) {
+    foreach ($User in $Username) {
         if ($PSBoundParameters.ContainsKey('Credential')) {
-            $username = Get-SHDUsername -Idenity $user -Credential $Credential
-            Get-ADUser -Identity $username -Properties * -Credential $Credential | select-object Name, Samaccountname, Department, Office, EmployeeID, EmployeeNumber, Mail, @{l = "Last Logon Time"; e = { [datetime]$_.lastLogonTimestamp } }, LockedOut, PasswordLastSet, WhenCreated, Enabled, @{l = "Groups"; e = { ($_.memberof -replace 'CN=', '') -replace ',.*', '' } }
+            $Groups = Get-ADPrincipalGroupMembership -Identity $User -Credential $Credential
+            $SG = $Groups | Where-Object { $_.GroupCategory -like "Security" }
+            $DG = $Groups | Where-Object { $_.GroupCategory -like "Distribution" }
+            $Info = Get-ADUser -Identity $User -Properties *, "msDS-UserPasswordExpiryTimeComputed"-Credential $Credential
+            [pscustomobject]@{
+                Name               = $Info.Name
+                Samaccountname     = $Info.Samaccountname
+                Department         = $Info.department
+                Office             = $info.Office
+                EmployeeID         = $Info.EmployeeID
+                Email              = $info.Mail
+                LastLogonDate      = ([datetime]$Info.lastLogonTimestamp).ToString()
+                PasswordLastSet    = $info.PasswordLastSet
+                PasswordExpiryDate = [datetime]::FromFileTime($info."msDS-UserPasswordExpiryTimeComputed")
+                Created            = $Info.WhenCreated
+                Enabled            = $Info.Enabled 
+                LockedOut          = $info.LockedOut
+                GroupCount         = $Groups.count 
+                SecurityGroups     = $SG.name 
+                DistributionGroups = $DG.Name
+            }
         }
         else {
-            $username = Get-SHDUsername -Idenity $user
-            Get-ADUser -Identity $username -Properties * | select-object Name, Samaccountname, Department, Office, EmployeeID, EmployeeNumber, Mail, @{l = "Last Logon Time"; e = { [datetime]$_.lastLogonTimestamp } }, LockedOut, PasswordLastSet, WhenCreated, Enabled, @{l = "Groups"; e = { ($_.memberof -replace 'CN=', '') -replace ',.*', '' } }
-        }        
-    }
+            $Groups = Get-ADPrincipalGroupMembership -Identity $User 
+            $Info = Get-ADUser -Identity $User -Properties *, "msDS-UserPasswordExpiryTimeComputed"
+            $SG = $Groups | Where-Object { $_.GroupCategory -like "Security" }
+            $DG = $Groups | Where-Object { $_.GroupCategory -like "Distribution" }
+            [pscustomobject]@{
+                Name               = $Info.Name
+                Samaccountname     = $Info.Samaccountname
+                Department         = $Info.department
+                Office             = $info.Office
+                EmployeeID         = $Info.EmployeeID
+                Email              = $info.Mail
+                LastLogonDate      = ([datetime]$Info.lastLogonTimestamp).ToString()
+                PasswordLastSet    = $info.PasswordLastSet
+                PasswordExpiryDate = ([datetime]::FromFileTime($info."msDS-UserPasswordExpiryTimeComputed")).tostring()
+                Created            = $Info.WhenCreated
+                Enabled            = $Info.Enabled 
+                LockedOut          = $info.LockedOut
+                GroupCount         = $Groups.count 
+                SecurityGroups     = $SG.name 
+                DistributionGroups = $DG.Name
+            }
+        }
+    }        
 } #Review - Testing, Documentation
 function Get-SHDUsersFromOU {
     [cmdletbinding()]
@@ -5318,7 +5359,6 @@ Function Get-SHDUserPasswordExpirey {
     Begin {
         #Set the number of days within expiration.  This will start to send the email x number of days before it is expired.
         $DaysWithinExpiration = $Days
- 
         #Set the days where the password is already expired and needs to change. -- Do Not Modify --
         $MaxPwdAge = (Get-ADDefaultDomainPasswordPolicy).MaxPasswordAge.Days
         $expiredDate = (Get-Date).addDays(-$MaxPwdAge)
@@ -5986,54 +6026,6 @@ Function Get-SHDReceiveConnectorScope {
         $Return += $Tmp
     }
     $Return
-}
-function Set-ProfilePicture {
-    [cmdletbinding()]
-    param (
-        [Parameter(Mandatory = $true)][string]$username,
-        [Parameter(Mandatory = $true)][string]$Domain
-    )
-    
-    #Tests if you are connected to 
-    if (!(Get-Command get-mailbox)) {
-        import-exchange
-        Write-Verbose "Importing Exchange"
-    }
-    else {
-        Write-Verbose "Exchange already present."
-    }
-
-    if (!(Get-Mailbox -Identity $username)) {
-        Write-Host "$username mailbox is closed."
-        break
-    }
-    else {
-        Write-Verbose "$($Username)'s Mailbox Present."
-    }
-    #$username = "dbolding"
-    if (Get-ChildItem "\\nas\IT_Public\ADPictures\$($username).jpg") {
-        $Photo = Get-ChildItem "\\nas\IT_Public\ADPictures\$($username).jpg"
-        Write-Verbose "$($username)'s photo exists."
-    }
-    else {
-        Write-Host "$($username)'s photo is not present."
-        break
-    }
-    
-    #trys to set the user's photo
-    try {
-        Remove-UserPhoto -Identity "$username@$Domain" -Confirm:$false
-        Set-UserPhoto -Identity "$Username@$Domain" -PictureData ([System.IO.File]::ReadAllBytes($Photo.FullName)) -Confirm:$false
-        Set-CASMailbox "$Username@$domain" -OwaMailboxPolicy default
-        Write-Verbose "$($username)'s photo set."
-    } 
-    catch {
-        Write-Host "$username failed to load photo."
-        break 
-    }
-
-    #displays the user's photo information. 
-    Get-UserPhoto -Identity "$Username@$Domain" 
 }
 
 #------------------------Other--------------------
