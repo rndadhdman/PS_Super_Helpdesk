@@ -3,14 +3,14 @@ function Get-SHDGPOName {
 		.SYNOPSIS
 		    Finds a group policy by a name given.
 		.DESCRIPTION
-		    If you can't remember a group policy's full name, yo ucan find it with this script. 
+		    If you can't remember a group policy's full name, yo ucan find it with this script.
         .PARAMETER GroupPolicyName
-            The name you are searching for. 
+            The name you are searching for.
 		.EXAMPLE
             Get-GPOName -GroupPolicyName "Firewall"
 
-            Finds the group policy with the matching name. 
-            
+            Finds the group policy with the matching name.
+
             DisplayName      : Domain Firewall
             DomainName       : Domain
             Owner            : User
@@ -23,11 +23,11 @@ function Get-SHDGPOName {
             ComputerVersion  :
             WmiFilter        :
 		.LINK
-		    https://github.com/boldingdp/
+		    https://github.com/rndadhdman/PS_Super_Helpdesk
 		.NOTES
             Author: David Bolding
-            Site: https://github.com/boldingdp/
-	#> 
+            Site: https://github.com/rndadhdman/PS_Super_Helpdesk
+	#>
     [CmdletBinding()]
     param (
         [Parameter(
@@ -37,6 +37,6 @@ function Get-SHDGPOName {
             Mandatory = $true)]
         [Alias('GroupPolicy', 'GPO', 'ID')][String]$GroupPolicyName
     )
-    $AllGPOs = Get-GPO -All    
+    $AllGPOs = Get-GPO -All
     $AllGPOs | Where-Object { $_.DisplayName -like "*$GroupPolicyName*" }
 }
